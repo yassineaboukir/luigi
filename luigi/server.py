@@ -296,13 +296,24 @@ class MetricsHandler(tornado.web.RequestHandler):
             metrics_collector.configure_http_handler(self)
             self.write(metrics)
 
-
-def app(scheduler):
+def app(scheduler, address):
     settings = {"static_path": os.path.join(os.path.dirname(__file__), "static"),
                 "unescape": tornado.escape.xhtml_unescape,
                 "compress_response": True,
                 }
-    handlers = [
+        """
+        Host validation to prevent DNS rebinding attacks. 
+        Host is value of luigid --address provided, otherwise default to localhost  
+        """
+    if address:
+        host = r'{0}'.format(address)
+    else:
+        # if not, it expects default host which is 127.0.0.1
+        host = r'localhost|127\.0\.0\.1'
+    
+    api_app = tornado.web.Application({}, **settings)
+
+    api_app.add_handlers(host, [
         (r'/api/(.*)', RPCHandler, {"scheduler": scheduler}),
         (r'/', RootPathHandler, {'scheduler': scheduler}),
         (r'/tasklist', AllRunHandler, {'scheduler': scheduler}),
@@ -312,10 +323,9 @@ def app(scheduler):
         (r'/history/by_id/(.*?)', ByIdHandler, {'scheduler': scheduler}),
         (r'/history/by_params/(.*?)', ByParamsHandler, {'scheduler': scheduler}),
         (r'/metrics', MetricsHandler, {'scheduler': scheduler})
-    ]
-    api_app = tornado.web.Application(handlers, **settings)
-    return api_app
+    ])
 
+    return api_app
 
 def _init_api(scheduler, api_port=None, address=None, unix_socket=None):
     api_app = app(scheduler)
